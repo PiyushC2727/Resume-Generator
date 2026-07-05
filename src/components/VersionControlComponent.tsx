@@ -15,17 +15,30 @@ interface VersionControlProps {
 }
 
 export default function VersionControl({ currentData, onRestore }: VersionControlProps) {
-  const [snapshots, setSnapshots] = useState<VersionSnapshot[]>([
-    {
-      id: 'snap-1',
-      name: 'Baseline alex_morgan_cv (Preloaded)',
-      timestamp: new Date().toLocaleString(),
-      data: currentData
-    }
-  ]);
+  const [snapshots, setSnapshots] = useState<VersionSnapshot[]>([]);
   const [saveName, setSaveName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSave = () => {
+  React.useEffect(() => {
+    fetchSnapshots();
+  }, []);
+
+  const fetchSnapshots = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/drafts');
+      if (response.ok) {
+        const data = await response.json();
+        setSnapshots(data);
+      }
+    } catch (err) {
+      console.error('Failed to load snapshots:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
     if (!saveName.trim()) return;
     const newSnap: VersionSnapshot = {
       id: `snap-${Date.now()}`,
@@ -33,16 +46,49 @@ export default function VersionControl({ currentData, onRestore }: VersionContro
       timestamp: new Date().toLocaleString(),
       data: JSON.parse(JSON.stringify(currentData)) // deep copy
     };
-    setSnapshots([newSnap, ...snapshots]);
-    setSaveName('');
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSnap)
+      });
+      if (response.ok) {
+        setSnapshots([newSnap, ...snapshots]);
+        setSaveName('');
+      } else {
+        alert('Failed to save version to database.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Failed to save version: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleRestore = (snap: VersionSnapshot) => {
     onRestore(JSON.parse(JSON.stringify(snap.data)));
   };
 
-  const handleDelete = (id: string) => {
-    setSnapshots(snapshots.filter(s => s.id !== id));
+  const handleDelete = async (id: string) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/drafts/${id}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setSnapshots(snapshots.filter(s => s.id !== id));
+      } else {
+        alert('Failed to delete version.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Failed to delete version: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

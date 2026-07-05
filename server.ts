@@ -7,6 +7,7 @@ import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import rateLimit from 'express-rate-limit';
+import { getDbConnection } from './db';
 
 const execPromise = promisify(exec);
 
@@ -634,6 +635,53 @@ Ensure that:
   } catch (error: any) {
     console.error('Error in /api/resume/latex:', error);
     res.status(500).json({ error: error.message || 'An error occurred during LaTeX code generation.' });
+  }
+});
+
+/**
+ * REST API for Resume Drafts snap-saving to MySQL Database
+ */
+app.get('/api/drafts', async (req: express.Request, res: express.Response) => {
+  try {
+    const db = await getDbConnection();
+    const [rows] = await db.query('SELECT id, name, timestamp, resume_data AS data FROM resume_drafts ORDER BY timestamp DESC');
+    res.json(rows);
+  } catch (error: any) {
+    console.error('[DB Error] Failed to fetch drafts:', error);
+    res.status(500).json({ error: 'Failed to load drafts from database.' });
+  }
+});
+
+app.post('/api/drafts', async (req: express.Request, res: express.Response) => {
+  try {
+    const { id, name, timestamp, data } = req.body;
+    if (!id || !name || !data) {
+      return res.status(400).json({ error: 'Missing id, name, or data.' });
+    }
+    const db = await getDbConnection();
+    await db.query(
+      'INSERT INTO resume_drafts (id, name, timestamp, resume_data) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), timestamp = VALUES(timestamp), resume_data = VALUES(resume_data)',
+      [id, name, timestamp || new Date().toLocaleString(), JSON.stringify(data)]
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[DB Error] Failed to save draft:', error);
+    res.status(500).json({ error: 'Failed to save draft in database.' });
+  }
+});
+
+app.delete('/api/drafts/:id', async (req: express.Request, res: express.Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Missing draft ID.' });
+    }
+    const db = await getDbConnection();
+    await db.query('DELETE FROM resume_drafts WHERE id = ?', [id]);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[DB Error] Failed to delete draft:', error);
+    res.status(500).json({ error: 'Failed to delete draft from database.' });
   }
 });
 
