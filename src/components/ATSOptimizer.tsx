@@ -10,11 +10,18 @@ interface ATSOptimizerProps {
   onRunAnalysis: (jobDescription?: string) => Promise<void>;
   onApplyOptimization: () => Promise<void>;
   isAILoading: boolean;
+  jobDescription: string;
+  onChangeJobDescription: (jd: string) => void;
 }
 
-export default function ATSOptimizer({ analysis, onRunAnalysis, onApplyOptimization, isAILoading }: ATSOptimizerProps) {
-  const [targetJD, setTargetJD] = useState('');
-  const [showJDInput, setShowJDInput] = useState(false);
+export default function ATSOptimizer({ 
+  analysis, 
+  onRunAnalysis, 
+  onApplyOptimization, 
+  isAILoading,
+  jobDescription,
+  onChangeJobDescription
+}: ATSOptimizerProps) {
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return { text: 'text-emerald-600', border: 'border-emerald-500', bg: 'bg-emerald-50' };
@@ -65,8 +72,8 @@ export default function ATSOptimizer({ analysis, onRunAnalysis, onApplyOptimizat
                 <span className="text-[11px] font-bold text-slate-700">Target specific job description? (Highly recommended)</span>
               </div>
               <textarea
-                value={targetJD}
-                onChange={(e) => setTargetJD(e.target.value)}
+                value={jobDescription}
+                onChange={(e) => onChangeJobDescription(e.target.value)}
                 placeholder="Paste the target job posting / requirements here..."
                 rows={3}
                 className="w-full text-xs p-2.5 border border-slate-250 bg-white rounded-xl focus:outline-none"
@@ -75,7 +82,7 @@ export default function ATSOptimizer({ analysis, onRunAnalysis, onApplyOptimizat
 
             <button
               type="button"
-              onClick={() => onRunAnalysis(targetJD)}
+              onClick={() => onRunAnalysis(jobDescription)}
               disabled={isAILoading}
               className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer"
             >
@@ -103,7 +110,7 @@ export default function ATSOptimizer({ analysis, onRunAnalysis, onApplyOptimizat
                 </p>
                 <div className="flex flex-wrap justify-center sm:justify-start gap-2 pt-2">
                   <button
-                    onClick={() => onRunAnalysis(targetJD)}
+                    onClick={() => onRunAnalysis(jobDescription)}
                     disabled={isAILoading}
                     className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all"
                   >
@@ -118,6 +125,18 @@ export default function ATSOptimizer({ analysis, onRunAnalysis, onApplyOptimizat
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* Active Job Description Input */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-left">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Target Job Description</span>
+              <textarea
+                value={jobDescription}
+                onChange={(e) => onChangeJobDescription(e.target.value)}
+                placeholder="Paste new target job requirements here to re-scan..."
+                rows={3}
+                className="w-full text-xs p-2.5 border border-slate-250 bg-white rounded-xl focus:outline-none font-sans"
+              />
             </div>
 
             {/* Resume Strengths & Weaknesses */}

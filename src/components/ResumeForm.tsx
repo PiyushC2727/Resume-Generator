@@ -12,6 +12,8 @@ interface ResumeFormProps {
   onAISummaryPolish: () => Promise<void>;
   onAIBulletPolish: (experienceId: string, bulletIndex: number) => Promise<void>;
   isAILoading: boolean;
+  jobDescription: string;
+  onChangeJobDescription: (jd: string) => void;
 }
 
 export default function ResumeForm({ 
@@ -19,9 +21,11 @@ export default function ResumeForm({
   onChange, 
   onAISummaryPolish, 
   onAIBulletPolish,
-  isAILoading 
+  isAILoading,
+  jobDescription,
+  onChangeJobDescription
 }: ResumeFormProps) {
-  const [activeTab, setActiveTab] = useState<'personal' | 'experience' | 'education' | 'projects' | 'skills' | 'extra'>('personal');
+  const [activeTab, setActiveTab] = useState<'personal' | 'experience' | 'education' | 'projects' | 'skills' | 'extra' | 'target-job'>('personal');
 
   // ----- AI IMPORTER STATE -----
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -488,7 +492,7 @@ export default function ResumeForm({
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
       {/* Category Tabs */}
-      <div className="grid grid-cols-6 border-b border-slate-200 bg-slate-50/50 p-1 gap-1">
+      <div className="grid grid-cols-4 sm:grid-cols-7 border-b border-slate-200 bg-slate-50/50 p-1 gap-1">
         {[
           { id: 'personal', icon: <User className="w-4 h-4" />, label: 'Profile' },
           { id: 'experience', icon: <Briefcase className="w-4 h-4" />, label: 'Work' },
@@ -496,6 +500,7 @@ export default function ResumeForm({
           { id: 'projects', icon: <Code className="w-4 h-4" />, label: 'Projects' },
           { id: 'skills', icon: <ShieldCheck className="w-4 h-4" />, label: 'Skills' },
           { id: 'extra', icon: <Award className="w-4 h-4" />, label: 'More' },
+          { id: 'target-job', icon: <Briefcase className="w-4 h-4 text-indigo-500" />, label: 'Job' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -503,7 +508,7 @@ export default function ResumeForm({
             className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${
               activeTab === tab.id 
                 ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' 
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+                : 'text-slate-500 hover:text-slate-880 hover:bg-slate-150'
             }`}
           >
             {tab.icon}
@@ -1264,6 +1269,28 @@ export default function ResumeForm({
               />
             </div>
 
+          </div>
+        )}
+        {activeTab === 'target-job' && (
+          <div className="space-y-5">
+            <div className="border-b border-slate-100 pb-2">
+              <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-indigo-500" /> Target Job Description
+              </h3>
+            </div>
+            
+            <div className="space-y-2">
+              <p className="text-[11px] text-slate-500 leading-normal font-sans font-medium">
+                Pasting the job description here allows our AI Career Coach and ATS Scoring modules to analyze resume keyword gaps, suggest improvements, and tailor cover letters specifically for this position.
+              </p>
+              <textarea 
+                value={jobDescription}
+                onChange={(e) => onChangeJobDescription(e.target.value)}
+                placeholder="Paste the job posting description / key requirements here..."
+                rows={10}
+                className="w-full text-xs p-3.5 border border-slate-250 rounded-2xl focus:outline-none focus:border-indigo-500 leading-normal bg-white"
+              />
+            </div>
           </div>
         )}
 

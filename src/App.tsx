@@ -50,6 +50,9 @@ export default function App() {
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [isCompilingPDF, setIsCompilingPDF] = useState<boolean>(false);
 
+  // Shared target job description state
+  const [jobDescription, setJobDescription] = useState<string>('');
+
   useEffect(() => {
     try {
       setIsInIframe(window.self !== window.top);
@@ -624,6 +627,8 @@ ${skills.join(', ')}
                 onAISummaryPolish={handleAISummaryPolish}
                 onAIBulletPolish={handleAIBulletPolish}
                 isAILoading={isAILoading}
+                jobDescription={jobDescription}
+                onChangeJobDescription={setJobDescription}
               />
             )}
             {activeWorkspaceTab === 'coach' && (
@@ -639,6 +644,8 @@ ${skills.join(', ')}
                 onRunAnalysis={handleRunATSAnalysis}
                 onApplyOptimization={handleApplyATSOptimization}
                 isAILoading={isAILoading}
+                jobDescription={jobDescription}
+                onChangeJobDescription={setJobDescription}
               />
             )}
             {activeWorkspaceTab === 'branding' && (
@@ -649,6 +656,7 @@ ${skills.join(', ')}
                 onGenerateCoverLetter={handleGenerateCoverLetter}
                 onGenerateLinkedIn={handleGenerateLinkedIn}
                 isAILoading={isAILoading}
+                jobDescription={jobDescription}
               />
             )}
             {activeWorkspaceTab === 'insights' && (

@@ -12,6 +12,7 @@ interface CoverLetterLinkedInProps {
   onGenerateCoverLetter: (company: string, title: string, manager: string, jd: string) => Promise<void>;
   onGenerateLinkedIn: () => Promise<void>;
   isAILoading: boolean;
+  jobDescription?: string;
 }
 
 export default function CoverLetterLinkedIn({
@@ -20,7 +21,8 @@ export default function CoverLetterLinkedIn({
   linkedinProfile,
   onGenerateCoverLetter,
   onGenerateLinkedIn,
-  isAILoading
+  isAILoading,
+  jobDescription = ''
 }: CoverLetterLinkedInProps) {
   const [activeSubTab, setActiveSubTab] = useState<'cover' | 'linkedin'>('cover');
 
@@ -28,7 +30,13 @@ export default function CoverLetterLinkedIn({
   const [companyName, setCompanyName] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [managerName, setManagerName] = useState('');
-  const [jobDesc, setJobDesc] = useState('');
+  const [jobDesc, setJobDesc] = useState(jobDescription);
+
+  React.useEffect(() => {
+    if (jobDescription) {
+      setJobDesc(jobDescription);
+    }
+  }, [jobDescription]);
 
   // Clipboard feedbacks
   const [copiedLetter, setCopiedLetter] = useState(false);
