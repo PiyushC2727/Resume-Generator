@@ -23,13 +23,14 @@ export default function VersionControl({ currentData, onRestore }: VersionContro
     fetchSnapshots();
   }, []);
 
-  const fetchSnapshots = async () => {
+  const fetchSnapshots = () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/drafts');
-      if (response.ok) {
-        const data = await response.json();
-        setSnapshots(data);
+      const localData = localStorage.getItem('resume_snapshots');
+      if (localData) {
+        setSnapshots(JSON.parse(localData));
+      } else {
+        setSnapshots([]);
       }
     } catch (err) {
       console.error('Failed to load snapshots:', err);
@@ -38,7 +39,7 @@ export default function VersionControl({ currentData, onRestore }: VersionContro
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!saveName.trim()) return;
     const newSnap: VersionSnapshot = {
       id: `snap-${Date.now()}`,
@@ -47,24 +48,14 @@ export default function VersionControl({ currentData, onRestore }: VersionContro
       data: JSON.parse(JSON.stringify(currentData)) // deep copy
     };
     
-    setIsLoading(true);
     try {
-      const response = await fetch('/api/drafts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSnap)
-      });
-      if (response.ok) {
-        setSnapshots([newSnap, ...snapshots]);
-        setSaveName('');
-      } else {
-        alert('Failed to save version to database.');
-      }
+      const updated = [newSnap, ...snapshots];
+      setSnapshots(updated);
+      localStorage.setItem('resume_snapshots', JSON.stringify(updated));
+      setSaveName('');
     } catch (err: any) {
       console.error(err);
       alert('Failed to save version: ' + err.message);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -72,22 +63,14 @@ export default function VersionControl({ currentData, onRestore }: VersionContro
     onRestore(JSON.parse(JSON.stringify(snap.data)));
   };
 
-  const handleDelete = async (id: string) => {
-    setIsLoading(true);
+  const handleDelete = (id: string) => {
     try {
-      const response = await fetch(`/api/drafts/${id}`, {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        setSnapshots(snapshots.filter(s => s.id !== id));
-      } else {
-        alert('Failed to delete version.');
-      }
+      const updated = snapshots.filter(s => s.id !== id);
+      setSnapshots(updated);
+      localStorage.setItem('resume_snapshots', JSON.stringify(updated));
     } catch (err: any) {
       console.error(err);
       alert('Failed to delete version: ' + err.message);
-    } finally {
-      setIsLoading(false);
     }
   };
 

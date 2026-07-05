@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ResumeData, WorkExperience, Education, Project, Certification, Language, VolunteerExperience } from '../types';
+import { browserParseResume, getClientApiKey } from '../utils/geminiClient';
 import { 
   User, Briefcase, GraduationCap, Code, ShieldCheck, 
   Plus, Trash2, ArrowUpDown, Sparkles, MessageSquare, 
@@ -163,30 +164,20 @@ export default function ResumeForm({
         }
       }
 
-      // Make API call
-      const response = await fetch('/api/resume/parse', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: textContent || undefined,
-          pdfBase64: pdfBase64Content || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to parse the resume.');
+      // Check API Key
+      const apiKey = getClientApiKey();
+      if (!apiKey) {
+        throw new Error('Gemini API Key is not configured. Please enter your API key in the settings modal at the top of the page first.');
       }
 
-      const responseData = await response.json();
-      if (!responseData.parsedResume) {
+      // Make client-side Gemini Parser call
+      const parsedResume = await browserParseResume(textContent || '', pdfBase64Content || undefined);
+      if (!parsedResume) {
         throw new Error('Could not extract structured data. Please try copy-pasting the text directly.');
       }
 
       // Set the successfully parsed data
-      setSuccessData(responseData.parsedResume);
+      setSuccessData(parsedResume);
     } catch (err: any) {
       console.error(err);
       setImportError(err.message || 'An error occurred during parsing.');
