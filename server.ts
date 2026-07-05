@@ -1033,8 +1033,13 @@ async function initializeServer() {
     console.log('Production static asset serving configured.');
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', async () => {
     console.log(`World-Class Resume Generator active on http://localhost:${PORT}`);
+    try {
+      await getDbConnection();
+    } catch (dbErr) {
+      console.error('[MySQL Startup Warning] Could not connect to database on launch:', dbErr);
+    }
   });
 }
 
