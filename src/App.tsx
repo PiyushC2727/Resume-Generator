@@ -310,8 +310,14 @@ export default function App() {
         body: JSON.stringify({ latexCode: latex })
       });
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'Compilation failed');
+        let errMsg = 'LaTeX compilation failed.';
+        try {
+          const errorData = await response.json();
+          errMsg = errorData.details || errorData.error || errMsg;
+        } catch (_) {
+          errMsg = await response.text();
+        }
+        throw new Error(errMsg);
       }
       const blob = await response.blob();
       if (pdfBlobUrl) {
@@ -338,8 +344,14 @@ export default function App() {
         body: JSON.stringify({ latexCode: latex })
       });
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'LaTeX compilation failed.');
+        let errMsg = 'LaTeX compilation failed.';
+        try {
+          const errorData = await response.json();
+          errMsg = errorData.details || errorData.error || errMsg;
+        } catch (_) {
+          errMsg = await response.text();
+        }
+        throw new Error(errMsg);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
