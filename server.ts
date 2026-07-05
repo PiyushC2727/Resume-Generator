@@ -649,18 +649,28 @@ app.post('/api/resume/compile', async (req: express.Request, res: express.Respon
 
     fs.writeFileSync(texFilePath, latexCode, 'utf8');
 
-    const tectonicPath = path.resolve(process.cwd(), '../../bin/tectonic.exe');
-    console.log(`[Tectonic Compiler] Compiling resume in ${tempDir}...`);
+    // Resolve platform-agnostic Tectonic command
+    let tectonicCmd = 'tectonic'; // default to global command in system PATH
+    const localWindowsTectonic = path.resolve(process.cwd(), '../../bin/tectonic.exe');
+    const localLinuxTectonic = path.resolve(process.cwd(), '../../bin/tectonic');
+
+    if (process.platform === 'win32' && fs.existsSync(localWindowsTectonic)) {
+      tectonicCmd = `"${localWindowsTectonic}"`;
+    } else if (process.platform !== 'win32' && fs.existsSync(localLinuxTectonic)) {
+      tectonicCmd = `"${localLinuxTectonic}"`;
+    }
+
+    console.log(`[Tectonic Compiler] Compiling resume in ${tempDir} using command: ${tectonicCmd}`);
 
     const options = {
       cwd: tempDir,
       env: {
         ...process.env,
-        PATH: `${path.resolve(process.cwd(), '../../bin')};${process.env.PATH}`
+        PATH: `${path.resolve(process.cwd(), '../../bin')}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}`
       }
     };
 
-    await execPromise(`"${tectonicPath}" "${texFilePath}"`, options);
+    await execPromise(`${tectonicCmd} "${texFilePath}"`, options);
 
     if (!fs.existsSync(pdfFilePath)) {
       throw new Error('Tectonic compilation completed, but resume.pdf was not generated.');
