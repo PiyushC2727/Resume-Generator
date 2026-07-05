@@ -7,6 +7,7 @@ import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import rateLimit from 'express-rate-limit';
+import cors from 'cors';
 import { getDbConnection } from './db';
 
 const execPromise = promisify(exec);
@@ -18,6 +19,10 @@ const PORT = 3000;
 const app = express();
 
 app.use(express.json({ limit: '10mb' }));
+app.use(cors({
+  origin: '*',
+  credentials: true
+}));
 
 // Apply rate limiting middleware to prevent API abuse in production hosting (e.g. Railway)
 const apiLimiter = rateLimit({
