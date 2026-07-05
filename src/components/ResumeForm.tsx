@@ -164,20 +164,30 @@ export default function ResumeForm({
         }
       }
 
-      // Check API Key
-      const apiKey = getClientApiKey();
-      if (!apiKey) {
-        throw new Error('Gemini API Key is not configured. Please enter your API key in the settings modal at the top of the page first.');
+      // Make API call
+      const response = await fetch('/api/resume/parse', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: textContent || undefined,
+          pdfBase64: pdfBase64Content || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to parse the resume.');
       }
 
-      // Make client-side Gemini Parser call
-      const parsedResume = await browserParseResume(textContent || '', pdfBase64Content || undefined);
-      if (!parsedResume) {
+      const responseData = await response.json();
+      if (!responseData.parsedResume) {
         throw new Error('Could not extract structured data. Please try copy-pasting the text directly.');
       }
 
       // Set the successfully parsed data
-      setSuccessData(parsedResume);
+      setSuccessData(responseData.parsedResume);
     } catch (err: any) {
       console.error(err);
       setImportError(err.message || 'An error occurred during parsing.');

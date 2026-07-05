@@ -67,10 +67,6 @@ export default function App() {
   // Shared target job description state
   const [jobDescription, setJobDescription] = useState<string>('');
 
-  // API Key & Settings states
-  const [apiKey, setApiKey] = useState<string>(getClientApiKey());
-  const [tempApiKey, setTempApiKey] = useState<string>(apiKey);
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   useEffect(() => {
     try {
@@ -93,18 +89,22 @@ export default function App() {
     if (!resumeData.summary) return;
     setIsAILoading(true);
     try {
-      const polished = await browserPolishSummary(resumeData.summary, 'summary');
-      setResumeData(prev => ({
-        ...prev,
-        summary: polished
-      }));
-    } catch (err: any) {
-      console.error(err);
-      if (err.message === 'API_KEY_MISSING') {
-        setIsSettingsOpen(true);
-      } else {
-        alert('Unable to polish summary:\n' + err.message);
+      const response = await fetch('/api/resume/polish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: resumeData.summary, field: 'summary' })
+      });
+      if (!response.ok) throw new Error('API server failed');
+      const result = await response.json();
+      if (result.polishedText) {
+        setResumeData(prev => ({
+          ...prev,
+          summary: result.polishedText
+        }));
       }
+    } catch (err) {
+      console.error(err);
+      alert('Could not polish summary. Please check server logs.');
     } finally {
       setIsAILoading(false);
     }
@@ -121,25 +121,29 @@ export default function App() {
 
     setIsAILoading(true);
     try {
-      const polished = await browserPolishBullet(bulletText);
-      setResumeData(prev => ({
-        ...prev,
-        workExperiences: prev.workExperiences.map(exp => {
-          if (exp.id === experienceId) {
-            const newBullets = [...exp.bullets];
-            newBullets[bulletIndex] = polished;
-            return { ...exp, bullets: newBullets };
-          }
-          return exp;
-        })
-      }));
-    } catch (err: any) {
-      console.error(err);
-      if (err.message === 'API_KEY_MISSING') {
-        setIsSettingsOpen(true);
-      } else {
-        alert('Unable to polish bullet:\n' + err.message);
+      const response = await fetch('/api/resume/polish-bullet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bullet: bulletText })
+      });
+      if (!response.ok) throw new Error('API error polishing bullet');
+      const result = await response.json();
+      if (result.polishedBullet) {
+        setResumeData(prev => ({
+          ...prev,
+          workExperiences: prev.workExperiences.map(exp => {
+            if (exp.id === experienceId) {
+              const newBullets = [...exp.bullets];
+              newBullets[bulletIndex] = result.polishedBullet;
+              return { ...exp, bullets: newBullets };
+            }
+            return exp;
+          })
+        }));
       }
+    } catch (err) {
+      console.error(err);
+      alert('Unable to polish bullet text. Check API connections.');
     } finally {
       setIsAILoading(false);
     }
@@ -151,16 +155,19 @@ export default function App() {
   const handleSendMessage = async (text: string) => {
     setIsAILoading(true);
     try {
-      const result = await browserChatAssistant(resumeData, text);
+      const response = await fetch('/api/resume/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, resumeData })
+      });
+      if (!response.ok) throw new Error('Chat API failure');
+      const result = await response.json();
       if (result.updatedResumeData) {
         setResumeData(result.updatedResumeData);
       }
       return { explanation: result.explanation };
     } catch (err: any) {
       console.error(err);
-      if (err.message === 'API_KEY_MISSING') {
-        setIsSettingsOpen(true);
-      }
       throw err;
     } finally {
       setIsAILoading(false);
@@ -173,15 +180,19 @@ export default function App() {
   const handleRunATSAnalysis = async (jobDescription?: string) => {
     setIsAILoading(true);
     try {
-      const analysis = await browserRunATSAnalysis(resumeData, jobDescription || '');
-      setAtsAnalysis(analysis);
-    } catch (err: any) {
-      console.error(err);
-      if (err.message === 'API_KEY_MISSING') {
-        setIsSettingsOpen(true);
-      } else {
-        alert('ATS evaluation failed:\n' + err.message);
+      const response = await fetch('/api/resume/ats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeData, jobDescription: jobDescription || '' })
+      });
+      if (!response.ok) throw new Error('ATS scoring failure');
+      const result = await response.json();
+      if (result.analysis) {
+        setAtsAnalysis(result.analysis);
       }
+    } catch (err) {
+      console.error(err);
+      alert('Could not compute ATS metrics. Verify server execution.');
     } finally {
       setIsAILoading(false);
     }
@@ -191,21 +202,23 @@ export default function App() {
     if (!atsAnalysis) return;
     setIsAILoading(true);
     try {
-      const result = await browserChatAssistant(
-        resumeData,
-        `Incorporate the following missing skills directly into my core skills list: ${atsAnalysis.missingSkills.join(', ')}. Rewrite my bullet points to reflect these keyword goals: ${atsAnalysis.keywordGaps.slice(0, 4).join(', ')}.`
-      );
+      const response = await fetch('/api/resume/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: `Incorporate the following missing skills directly into my core skills list: ${atsAnalysis.missingSkills.join(', ')}. Rewrite my bullet points to reflect these keyword goals: ${atsAnalysis.keywordGaps.slice(0, 4).join(', ')}.`,
+          resumeData 
+        })
+      });
+      if (!response.ok) throw new Error('Re-optimizing failure');
+      const result = await response.json();
       if (result.updatedResumeData) {
         setResumeData(result.updatedResumeData);
         alert('Resume optimized! Core keyword gaps populated into core skills.');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      if (err.message === 'API_KEY_MISSING') {
-        setIsSettingsOpen(true);
-      } else {
-        alert('ATS optimization failed:\n' + err.message);
-      }
+      alert('Failed to execute bulk ATS optimizations.');
     } finally {
       setIsAILoading(false);
     }
@@ -217,15 +230,19 @@ export default function App() {
   const handleGenerateCoverLetter = async (company: string, title: string, manager: string, jd: string) => {
     setIsAILoading(true);
     try {
-      const coverLetter = await browserGenerateCoverLetter(resumeData, company, title, manager, jd);
-      setCoverLetter(coverLetter);
-    } catch (err: any) {
-      console.error(err);
-      if (err.message === 'API_KEY_MISSING') {
-        setIsSettingsOpen(true);
-      } else {
-        alert('Cover letter generation failed:\n' + err.message);
+      const response = await fetch('/api/resume/cover-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeData, companyName: company, jobTitle: title, managerName: manager, jobDescription: jd })
+      });
+      if (!response.ok) throw new Error('Cover letter service failed');
+      const result = await response.json();
+      if (result.coverLetter) {
+        setCoverLetter(result.coverLetter);
       }
+    } catch (err) {
+      console.error(err);
+      alert('Could not generate cover letter.');
     } finally {
       setIsAILoading(false);
     }
@@ -237,15 +254,19 @@ export default function App() {
   const handleGenerateLinkedIn = async () => {
     setIsAILoading(true);
     try {
-      const linkedinProfile = await browserGenerateLinkedIn(resumeData);
-      setLinkedinProfile(linkedinProfile);
-    } catch (err: any) {
-      console.error(err);
-      if (err.message === 'API_KEY_MISSING') {
-        setIsSettingsOpen(true);
-      } else {
-        alert('LinkedIn branding failed:\n' + err.message);
+      const response = await fetch('/api/resume/linkedin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeData })
+      });
+      if (!response.ok) throw new Error('LinkedIn optimization failed');
+      const result = await response.json();
+      if (result.linkedinProfile) {
+        setLinkedinProfile(result.linkedinProfile);
       }
+    } catch (err) {
+      console.error(err);
+      alert('Unable to form LinkedIn campaign details.');
     } finally {
       setIsAILoading(false);
     }
@@ -257,15 +278,19 @@ export default function App() {
   const handleGenerateInsights = async () => {
     setIsAILoading(true);
     try {
-      const insights = await browserGeneratePremiumInsights(resumeData);
-      setCoachInsights(insights);
-    } catch (err: any) {
-      console.error(err);
-      if (err.message === 'API_KEY_MISSING') {
-        setIsSettingsOpen(true);
-      } else {
-        alert('Unable to generate career coach insights:\n' + err.message);
+      const response = await fetch('/api/resume/premium', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeData })
+      });
+      if (!response.ok) throw new Error('Insights failed');
+      const result = await response.json();
+      if (result.premiumInsights) {
+        setCoachInsights(result.premiumInsights);
       }
+    } catch (err) {
+      console.error(err);
+      alert('Unable to extract career intelligence benchmarks.');
     } finally {
       setIsAILoading(false);
     }
@@ -294,29 +319,69 @@ export default function App() {
   };
 
   const compilePDF = async () => {
-    // Deprecated in browser-only mode since we compile directly on download
+    setIsCompilingPDF(true);
+    try {
+      const latex = generateLaTeX();
+      const response = await fetch('/api/resume/compile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latexCode: latex })
+      });
+      if (!response.ok) {
+        let errMsg = 'LaTeX compilation failed.';
+        try {
+          const errorData = await response.json();
+          errMsg = errorData.details || errorData.error || errMsg;
+        } catch (_) {
+          errMsg = await response.text();
+        }
+        throw new Error(errMsg);
+      }
+      const blob = await response.blob();
+      if (pdfBlobUrl) {
+        URL.revokeObjectURL(pdfBlobUrl);
+      }
+      const url = URL.createObjectURL(blob);
+      setPdfBlobUrl(url);
+    } catch (err: any) {
+      console.error(err);
+      alert('LaTeX Compilation failed:\n' + err.message);
+      setPreviewMode('html');
+    } finally {
+      setIsCompilingPDF(false);
+    }
   };
 
   const handleDownloadPDF = async () => {
     setIsAILoading(true);
     try {
-      const element = document.getElementById('resume-preview-container');
-      if (!element) {
-        throw new Error('Active resume layout element preview container was not found in DOM.');
+      const latex = generateLaTeX();
+      const response = await fetch('/api/resume/compile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latexCode: latex })
+      });
+      if (!response.ok) {
+        let errMsg = 'LaTeX compilation failed.';
+        try {
+          const errorData = await response.json();
+          errMsg = errorData.details || errorData.error || errMsg;
+        } catch (_) {
+          errMsg = await response.text();
+        }
+        throw new Error(errMsg);
       }
-      
-      const opt = {
-        margin:       [0.15, 0.15, 0.15, 0.15],
-        filename:     `resume_${resumeData.personalInfo.fullName.toLowerCase().replace(/\s+/g, '_')}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2.2, useCORS: true, letterRendering: true, dpi: 192 },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-      };
-
-      await html2pdf().from(element).set(opt).save();
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `resume_${resumeData.personalInfo.fullName.toLowerCase().replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     } catch (err: any) {
       console.error(err);
-      alert('Failed to compile and download PDF:\n' + err.message);
+      alert('Failed to compile PDF:\n' + err.message);
     } finally {
       setIsAILoading(false);
     }
@@ -510,18 +575,6 @@ ${skills.join(', ')}
       
       {/* 1. HEADER (No-print for PDF compilation) */}
       <header className="border-b border-slate-200 bg-white sticky top-0 z-40 shadow-3xs no-print">
-        {/* API Key missing notification */}
-        {!apiKey && (
-          <div className="bg-amber-50 border-b border-amber-250 p-2.5 text-center text-xs font-bold text-amber-800 flex items-center justify-center gap-2">
-            <span>🔑 Gemini API Key not configured. AI features are disabled.</span>
-            <button 
-              onClick={() => setIsSettingsOpen(true)}
-              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] uppercase font-extrabold tracking-wider transition-all cursor-pointer"
-            >
-              Configure Key
-            </button>
-          </div>
-        )}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="bg-indigo-600 text-white p-2 rounded-xl shadow-xs flex items-center justify-center">
@@ -536,15 +589,8 @@ ${skills.join(', ')}
             </div>
           </div>
 
-          {/* Quick PDF Trigger & Settings */}
+          {/* Quick PDF Trigger */}
           <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-slate-200 rounded-xl cursor-pointer transition-all"
-              title="API Settings"
-            >
-              <Key className="w-4 h-4" />
-            </button>
             <button 
               onClick={triggerPrintPDF}
               className="text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-3 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-3xs transition-all active:scale-[0.98]"
@@ -721,11 +767,43 @@ ${skills.join(', ')}
                 </select>
               </div>
 
-              {/* Preview Mode Indicator */}
+              {/* Preview Mode Selector */}
               <div className="flex items-center gap-2 border-l border-slate-250 pl-4">
                 <Eye className="w-4 h-4 text-slate-400" />
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Instant Live Preview</span>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Preview</span>
+                <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
+                  {[
+                    { id: 'html', label: 'HTML (Instant)' },
+                    { id: 'pdf', label: 'PDF (LaTeX)' },
+                  ].map((pm) => (
+                    <button
+                      key={pm.id}
+                      onClick={() => {
+                        setPreviewMode(pm.id as any);
+                        if (pm.id === 'pdf') {
+                          setTimeout(compilePDF, 100);
+                        }
+                      }}
+                      className={`px-2 py-1 text-[10px] font-extrabold rounded-md capitalize cursor-pointer transition-all ${
+                        previewMode === pm.id ? 'bg-white text-indigo-700 shadow-3xs' : 'text-slate-500 hover:text-slate-850'
+                      }`}
+                    >
+                      {pm.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {previewMode === 'pdf' && (
+                <button
+                  onClick={compilePDF}
+                  disabled={isCompilingPDF}
+                  className="text-[10px] font-extrabold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-1.5 px-2.5 rounded-lg border border-indigo-200/50 flex items-center gap-1 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isCompilingPDF ? 'animate-spin' : ''}`} />
+                  <span>Recompile PDF</span>
+                </button>
+              )}
 
             </div>
 
@@ -762,14 +840,44 @@ ${skills.join(', ')}
 
           {/* Printable visual frame */}
           <div className="flex justify-center bg-slate-100 border border-slate-200/50 rounded-2xl p-4 sm:p-6 overflow-x-auto main-container">
-            <div id="resume-preview-container" className="w-full flex justify-center">
-              <ResumePreview 
-                data={resumeData}
-                templateId={templateId}
-                colorAccent={colorAccent}
-                spacing={spacing}
-              />
-            </div>
+            {previewMode === 'html' ? (
+              <div id="resume-preview-container" className="w-full flex justify-center">
+                <ResumePreview 
+                  data={resumeData}
+                  templateId={templateId}
+                  colorAccent={colorAccent}
+                  spacing={spacing}
+                />
+              </div>
+            ) : (
+              <div className="w-full max-w-[800px] bg-white shadow-lg rounded-sm overflow-hidden flex flex-col justify-center items-center min-h-[1050px] relative border border-slate-250">
+                {isCompilingPDF && (
+                  <div className="absolute inset-0 bg-white/80 backdrop-blur-3xs flex flex-col items-center justify-center gap-3 z-10">
+                    <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
+                    <p className="text-xs font-extrabold text-slate-800">Compiling LaTeX Document...</p>
+                    <p className="text-[10px] text-slate-500 font-medium">Typesetting styles and compiling layout using local Tectonic engine...</p>
+                  </div>
+                )}
+                {pdfBlobUrl ? (
+                  <iframe 
+                    src={pdfBlobUrl} 
+                    className="w-full h-[1050px] border-0" 
+                    title="LaTeX Compiled PDF Preview"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-2.5 text-center p-8">
+                    <Info className="w-8 h-8 text-slate-400" />
+                    <p className="text-xs font-bold text-slate-700">No PDF compiled yet</p>
+                    <button 
+                      onClick={compilePDF}
+                      className="text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-xl cursor-pointer"
+                    >
+                      Compile PDF Now
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Quick instructions (No-print) */}
@@ -1063,59 +1171,7 @@ ${skills.join(', ')}
         </div>
       )}
 
-      {/* ================= SETTINGS DIALOG ================= */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 text-left">
-            <div className="flex justify-between items-center">
-              <h3 className="font-extrabold text-slate-950 text-base flex items-center gap-1.5">
-                <Key className="w-5 h-5 text-indigo-600" />
-                <span>Gemini API Key Settings</span>
-              </h3>
-              <button 
-                onClick={() => setIsSettingsOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <p className="text-xs text-slate-500 font-medium leading-normal">
-              Provide your own Gemini API Key to enable the professional AI Resume Writer, Coach, and ATS Scanner. Your key is stored safely in your local browser storage.
-            </p>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">API Key</label>
-              <input 
-                type="password"
-                value={tempApiKey}
-                onChange={(e) => setTempApiKey(e.target.value)}
-                placeholder="Paste your AQ.Ab8RN6... or AIzaSy... key here"
-                className="w-full text-xs p-3 border border-slate-250 rounded-xl focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-            <div className="flex gap-2 justify-end pt-2">
-              <button
-                onClick={() => {
-                  setTempApiKey(apiKey);
-                  setIsSettingsOpen(false);
-                }}
-                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 border border-slate-200 rounded-xl cursor-pointer transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  saveClientApiKey(tempApiKey);
-                  setApiKey(tempApiKey);
-                  setIsSettingsOpen(false);
-                }}
-                className="px-4 py-2.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer transition-all shadow-3xs hover:shadow-xs"
-              >
-                Save Settings
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
     </div>
   );
