@@ -6,6 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import rateLimit from 'express-rate-limit';
 
 const execPromise = promisify(exec);
 
@@ -16,6 +17,19 @@ const PORT = 3000;
 const app = express();
 
 app.use(express.json({ limit: '10mb' }));
+
+// Apply rate limiting middleware to prevent API abuse in production hosting (e.g. Railway)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // Limit each IP to 50 API requests per 15-minute window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many requests from this IP address. Please try again in 15 minutes.'
+  }
+});
+
+app.use('/api', apiLimiter);
 
 // Lazy initializer for the Gemini Client
 let aiClient: GoogleGenAI | null = null;
