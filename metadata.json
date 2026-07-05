@@ -1,0 +1,6 @@
+{
+  "name": "Project Sandbox",
+  "description": "An interactive, fully functional developer sandbox and workspace dashboard for AI Studio projects.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
