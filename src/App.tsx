@@ -8,13 +8,14 @@ import ATSOptimizer from './components/ATSOptimizer';
 import CoverLetterLinkedIn from './components/CoverLetterLinkedIn';
 import PremiumInsightsComponent from './components/PremiumInsightsComponent';
 import VersionControl from './components/VersionControlComponent';
+import { generateResumeLaTeX } from './utils/latexGenerator';
 
 import { 
   Sparkles, FileText, Bot, TrendingUp, History, 
   HelpCircle, Award, Printer, Copy, FileJson, 
   Code, Eye, Settings, Palette, Layout, Scaling, 
   Download, Briefcase, GraduationCap, Check, HelpCircle as HelpIcon, Info,
-  Linkedin, Compass, X, ExternalLink
+  Linkedin, Compass, X, ExternalLink, RefreshCw
 } from 'lucide-react';
 
 export default function App() {
@@ -43,6 +44,11 @@ export default function App() {
   const [copiedJson, setCopiedJson] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
+
+  // LaTeX PDF compilation states
+  const [previewMode, setPreviewMode] = useState<'html' | 'pdf'>('html');
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [isCompilingPDF, setIsCompilingPDF] = useState<boolean>(false);
 
   useEffect(() => {
     try {
@@ -294,109 +300,157 @@ export default function App() {
     downloadAnchor.remove();
   };
 
-  // Client side LaTeX compiler
+  const compilePDF = async () => {
+    setIsCompilingPDF(true);
+    try {
+      const latex = generateLaTeX();
+      const response = await fetch('/api/resume/compile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latexCode: latex })
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Compilation failed');
+      }
+      const blob = await response.blob();
+      if (pdfBlobUrl) {
+        URL.revokeObjectURL(pdfBlobUrl);
+      }
+      const url = URL.createObjectURL(blob);
+      setPdfBlobUrl(url);
+    } catch (err: any) {
+      console.error(err);
+      alert('LaTeX Compilation failed:\n' + err.message);
+      setPreviewMode('html');
+    } finally {
+      setIsCompilingPDF(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    setIsAILoading(true);
+    try {
+      const latex = generateLaTeX();
+      const response = await fetch('/api/resume/compile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latexCode: latex })
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'LaTeX compilation failed.');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `resume_${resumeData.personalInfo.fullName.toLowerCase().replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err: any) {
+      console.error(err);
+      alert('Failed to compile PDF:\n' + err.message);
+    } finally {
+      setIsAILoading(false);
+    }
+  };
+
+  const handleDownloadLaTeX = () => {
+    const latexString = `data:text/plain;charset=utf-8,${encodeURIComponent(generateLaTeX())}`;
+    const a = document.createElement('a');
+    a.href = latexString;
+    a.download = `resume_${resumeData.personalInfo.fullName.toLowerCase().replace(/\s+/g, '_')}.tex`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const handleDownloadMarkdown = () => {
+    const mdString = `data:text/markdown;charset=utf-8,${encodeURIComponent(generateMarkdown())}`;
+    const a = document.createElement('a');
+    a.href = mdString;
+    a.download = `resume_${resumeData.personalInfo.fullName.toLowerCase().replace(/\s+/g, '_')}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const handleDownloadPlainText = () => {
+    const txtString = `data:text/plain;charset=utf-8,${encodeURIComponent(generatePlainText())}`;
+    const a = document.createElement('a');
+    a.href = txtString;
+    a.download = `resume_${resumeData.personalInfo.fullName.toLowerCase().replace(/\s+/g, '_')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const handleDownloadDOCX = () => {
+    const htmlContent = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.4; margin: 1in; }
+            h1 { text-align: center; text-transform: uppercase; margin-bottom: 5px; }
+            .subheader { text-align: center; margin-bottom: 20px; color: #555; }
+            h2 { border-bottom: 1px solid #333; text-transform: uppercase; font-size: 14px; margin-top: 20px; }
+            .item { margin-bottom: 15px; }
+            .item-title { font-weight: bold; }
+            .item-date { float: right; font-weight: normal; }
+            .bullets { margin-top: 5px; margin-bottom: 5px; }
+          </style>
+        </head>
+        <body>
+          <h1>${resumeData.personalInfo.fullName}</h1>
+          <div class="subheader">
+            ${resumeData.personalInfo.phone} | ${resumeData.personalInfo.email} | ${resumeData.personalInfo.location}<br>
+            ${resumeData.personalInfo.linkedin} | ${resumeData.personalInfo.github}
+          </div>
+          
+          <h2>Professional Summary</h2>
+          <p>${resumeData.summary}</p>
+          
+          <h2>Experience</h2>
+          ${resumeData.workExperiences.map(exp => `
+            <div class="item">
+              <span class="item-title">${exp.position} at ${exp.company}</span>
+              <span class="item-date">${exp.startDate} - ${exp.isCurrent ? 'Present' : exp.endDate}</span>
+              <div style="color: #666; font-size: 12px;">${exp.location}</div>
+              <ul class="bullets">
+                ${exp.bullets.map(b => `<li>${b}</li>`).join('')}
+              </ul>
+            </div>
+          `).join('')}
+          
+          <h2>Skills</h2>
+          <p>${resumeData.skills.join(', ')}</p>
+          
+          <h2>Education</h2>
+          ${resumeData.educations.map(edu => `
+            <div class="item">
+              <span class="item-title">${edu.degree} in ${edu.fieldOfStudy}</span>
+              <span class="item-date">${edu.startDate} - ${edu.endDate}</span>
+              <div>${edu.institution} | GPA: ${edu.gpa}</div>
+            </div>
+          `).join('')}
+        </body>
+      </html>
+    `;
+    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `resume_${resumeData.personalInfo.fullName.toLowerCase().replace(/\s+/g, '_')}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   const generateLaTeX = (): string => {
-    const { personalInfo, summary, workExperiences, educations, projects, skills, certifications } = resumeData;
-    return `% —————————————————————————————————————————————————————————
-% LaTeX Resume Generated via Elite AI Resume Studio Builder
-% Tailored for optimal ATS parsing and traditional corporate structures
-% —————————————————————————————————————————————————————————
-\\documentclass[letterpaper,11pt]{article}
-\\usepackage{latexsym}
-\\usepackage[empty]{fullpage}
-\\usepackage{titlesec}
-\\usepackage{marvosym}
-\\usepackage[usenames,dvipsnames]{color}
-\\usepackage{verbatim}
-\\usepackage{enumitem}
-\\usepackage[hidelinks]{hyperref}
-\\usepackage{fancyhdr}
-\\usepackage[english]{babel}
-\\usepackage{tabularx}
-
-\\pagestyle{fancy}
-\\fancyhf{}
-\\fancyfoot{}
-\\renewcommand{\\headrulewidth}{0pt}
-\\renewcommand{\\footrulewidth}{0pt}
-
-\\addtolength{\\oddsidemargin}{-0.5in}
-\\addtolength{\\evensidemargin}{-0.5in}
-\\addtolength{\\textwidth}{1.0in}
-\\addtolength{\\topmargin}{-.5in}
-\\addtolength{\\textheight}{1.0in}
-
-\\urlstyle{same}
-
-\\raggedbottom
-\\raggedright
-\\setlength{\\tabcolsep}{0in}
-
-% Sections formatting
-\\titleformat{\\section}{
-  \\vspace{-4pt}\\scshape\\raggedright\\large
-}{}{0em}{}[\\color{black}\\titlerule \\vspace{-5pt}]
-
-\\begin{document}
-
-% --- HEADING ---
-\\begin{center}
-  \\textbf{\\Huge \\scshape ${personalInfo.fullName}} \\\\ \\vspace{1pt}
-  \\small ${personalInfo.phone} $|$ \\href{mailto:${personalInfo.email}}{${personalInfo.email}} $|$ 
-  \\href{https://${personalInfo.linkedin}}{LinkedIn} $|$ \\href{https://${personalInfo.github}}{GitHub}
-\\end{center}
-
-% --- SUMMARY ---
-\\section{Professional Summary}
-${summary}
-
-% --- WORK HISTORY ---
-\\section{Experience}
-\\begin{itemize}[leftmargin=0.15in, label={}]
-${workExperiences.map(exp => `
-  \\item
-    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}
-      \\textbf{${exp.position}} & ${exp.startDate} -- ${exp.isCurrent ? 'Present' : exp.endDate} \\\\
-      \\textit{${exp.company}} & \\textit{${exp.location}} \\\\
-    \\end{tabular*}\\\\ \\vspace{-5pt}
-    \\begin{itemize}
-      ${exp.bullets.map(b => `\\item ${b.replace(/%/g, '\\%').replace(/\$/g, '\\$')}`).join('\n      ')}
-    \\end{itemize}
-`).join('\n')}
-\\end{itemize}
-
-% --- EDUCATION ---
-\\section{Education}
-\\begin{itemize}[leftmargin=0.15in, label={}]
-${educations.map(edu => `
-  \\item
-    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}
-      \\textbf{${edu.institution}} & ${edu.startDate} -- ${edu.endDate} \\\\
-      \\textit{${edu.degree} in ${edu.fieldOfStudy}} & \\textit{GPA: ${edu.gpa}} \\\\
-    \\end{tabular*}\\\\
-`).join('\n')}
-\\end{itemize}
-
-% --- PROJECTS ---
-\\section{Projects}
-\\begin{itemize}[leftmargin=0.15in, label={}]
-${projects.map(proj => `
-  \\item
-    \\textbf{${proj.title}} $|$ \\textit{${proj.technologies.join(', ')}} \\\\
-    ${proj.description} \\\\
-`).join('\n')}
-\\end{itemize}
-
-% --- CORE SKILLS ---
-\\section{Technical Skills}
-\\begin{itemize}[leftmargin=0.15in, label={}]
-  \\small{\\item{
-    \\textbf{Technologies}{: ${skills.join(', ')}}
-  }}
-\\end{itemize}
-
-\\end{document}
-`;
+    return generateResumeLaTeX(resumeData, templateId, colorAccent, spacing);
   };
 
   const handleCopyLaTeX = () => {
@@ -661,7 +715,12 @@ ${skills.join(', ')}
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Template</span>
                 <select
                   value={templateId}
-                  onChange={(e) => setTemplateId(e.target.value)}
+                  onChange={(e) => {
+                    setTemplateId(e.target.value);
+                    if (previewMode === 'pdf') {
+                      setTimeout(compilePDF, 100);
+                    }
+                  }}
                   className="text-xs font-bold p-1.5 border border-slate-200 rounded-lg focus:outline-none bg-slate-50"
                 >
                   <option value="silicon-valley">Silicon Valley (Modern Tech)</option>
@@ -672,6 +731,44 @@ ${skills.join(', ')}
                   <option value="graduate-entry">Graduate Entry (Academic Focus)</option>
                 </select>
               </div>
+
+              {/* Preview Mode Selector */}
+              <div className="flex items-center gap-2 border-l border-slate-250 pl-4">
+                <Eye className="w-4 h-4 text-slate-400" />
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Preview</span>
+                <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
+                  {[
+                    { id: 'html', label: 'HTML (Instant)' },
+                    { id: 'pdf', label: 'PDF (LaTeX)' },
+                  ].map((pm) => (
+                    <button
+                      key={pm.id}
+                      onClick={() => {
+                        setPreviewMode(pm.id as any);
+                        if (pm.id === 'pdf') {
+                          setTimeout(compilePDF, 100);
+                        }
+                      }}
+                      className={`px-2 py-1 text-[10px] font-extrabold rounded-md capitalize cursor-pointer transition-all ${
+                        previewMode === pm.id ? 'bg-white text-indigo-700 shadow-3xs' : 'text-slate-500 hover:text-slate-850'
+                      }`}
+                    >
+                      {pm.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {previewMode === 'pdf' && (
+                <button
+                  onClick={compilePDF}
+                  disabled={isCompilingPDF}
+                  className="text-[10px] font-extrabold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-1.5 px-2.5 rounded-lg border border-indigo-200/50 flex items-center gap-1 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isCompilingPDF ? 'animate-spin' : ''}`} />
+                  <span>Recompile PDF</span>
+                </button>
+              )}
 
             </div>
 
@@ -708,12 +805,42 @@ ${skills.join(', ')}
 
           {/* Printable visual frame */}
           <div className="flex justify-center bg-slate-100 border border-slate-200/50 rounded-2xl p-4 sm:p-6 overflow-x-auto main-container">
-            <ResumePreview 
-              data={resumeData}
-              templateId={templateId}
-              colorAccent={colorAccent}
-              spacing={spacing}
-            />
+            {previewMode === 'html' ? (
+              <ResumePreview 
+                data={resumeData}
+                templateId={templateId}
+                colorAccent={colorAccent}
+                spacing={spacing}
+              />
+            ) : (
+              <div className="w-full max-w-[800px] bg-white shadow-lg rounded-sm overflow-hidden flex flex-col justify-center items-center min-h-[1050px] relative border border-slate-250">
+                {isCompilingPDF && (
+                  <div className="absolute inset-0 bg-white/80 backdrop-blur-3xs flex flex-col items-center justify-center gap-3 z-10">
+                    <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
+                    <p className="text-xs font-extrabold text-slate-800">Compiling LaTeX Document...</p>
+                    <p className="text-[10px] text-slate-500 font-medium">Typesetting styles and compiling layout using local Tectonic engine...</p>
+                  </div>
+                )}
+                {pdfBlobUrl ? (
+                  <iframe 
+                    src={pdfBlobUrl} 
+                    className="w-full h-[1050px] border-0" 
+                    title="LaTeX Compiled PDF Preview"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-2.5 text-center p-8">
+                    <Info className="w-8 h-8 text-slate-400" />
+                    <p className="text-xs font-bold text-slate-700">No PDF compiled yet</p>
+                    <button 
+                      onClick={compilePDF}
+                      className="text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-xl cursor-pointer"
+                    >
+                      Compile PDF Now
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Quick instructions (No-print) */}
@@ -810,14 +937,23 @@ ${skills.join(', ')}
                       </div>
                     </div>
 
-                    <div className="pt-1">
+                    <div className="pt-1 flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadPDF}
+                        disabled={isAILoading}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-3xs hover:shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>{isAILoading ? 'Compiling LaTeX...' : 'Download LaTeX-Compiled PDF'}</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => window.print()}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-3xs hover:shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        className="w-full bg-slate-100 hover:bg-slate-200 text-slate-750 font-bold text-xs py-2.5 px-4 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
                         <Printer className="w-4 h-4" />
-                        <span>Trigger System Print / Save PDF</span>
+                        <span>Print/Save HTML Layout</span>
                       </button>
                     </div>
                   </div>
@@ -841,106 +977,156 @@ ${skills.join(', ')}
                   <Code className="w-3.5 h-3.5 text-slate-400" />
                   <span>Extractions & Local Backups</span>
                 </h4>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  
-                  {/* LaTeX Item */}
-                  <div className="border border-slate-150 rounded-2xl p-3.5 space-y-2 flex flex-col justify-between hover:bg-slate-50/50 transition-all">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <Code className="w-4 h-4 text-slate-400" />
-                        <span className="text-xs font-extrabold text-slate-800">LaTeX Source Code</span>
+                    
+                    {/* LaTeX Item */}
+                    <div className="border border-slate-150 rounded-2xl p-3.5 space-y-2 flex flex-col justify-between hover:bg-slate-50/50 transition-all">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <Code className="w-4 h-4 text-slate-400" />
+                          <span className="text-xs font-extrabold text-slate-800">LaTeX Source Code</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1 leading-normal">
+                          Ready-to-compile Academic LaTeX document syntax.
+                        </p>
                       </div>
-                      <p className="text-[10px] text-slate-400 font-medium mt-1 leading-normal">
-                        Ready-to-compile Academic LaTeX document syntax.
-                      </p>
+                      <div className="flex gap-1.5 mt-2">
+                        <button
+                          type="button"
+                          onClick={handleCopyLaTeX}
+                          className="flex-1 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200/60 hover:border-indigo-155 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadLaTeX}
+                          className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-150 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Get .tex</span>
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleCopyLaTeX}
-                      className="w-full mt-2 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200/60 hover:border-indigo-150 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>{copiedLatex ? 'Copied LaTeX!' : 'Copy LaTeX'}</span>
-                    </button>
-                  </div>
 
-                  {/* Markdown Item */}
-                  <div className="border border-slate-150 rounded-2xl p-3.5 space-y-2 flex flex-col justify-between hover:bg-slate-50/50 transition-all">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-slate-400" />
-                        <span className="text-xs font-extrabold text-slate-800">Markdown Format</span>
+                    {/* Word DOCX Item */}
+                    <div className="border border-slate-150 rounded-2xl p-3.5 space-y-2 flex flex-col justify-between hover:bg-slate-50/50 transition-all">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <Briefcase className="w-4 h-4 text-slate-400" />
+                          <span className="text-xs font-extrabold text-slate-800">Microsoft Word (DOCX)</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1 leading-normal">
+                          Editable Word document formatted for Microsoft Office.
+                        </p>
                       </div>
-                      <p className="text-[10px] text-slate-400 font-medium mt-1 leading-normal">
-                        Structured text ideal for GitHub profile READMEs or portfolios.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleCopyMarkdown}
-                      className="w-full mt-2 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200/60 hover:border-indigo-150 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>{copiedMd ? 'Copied MD!' : 'Copy Markdown'}</span>
-                    </button>
-                  </div>
-
-                  {/* Plain Text Item */}
-                  <div className="border border-slate-150 rounded-2xl p-3.5 space-y-2 flex flex-col justify-between hover:bg-slate-50/50 transition-all">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-slate-400" />
-                        <span className="text-xs font-extrabold text-slate-800">Plain Text Summary</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 font-medium mt-1 leading-normal">
-                        Beautiful plain text format for quick form copy-pasting.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleCopyPlainText}
-                      className="w-full mt-2 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200/60 hover:border-indigo-150 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>{copiedTxt ? 'Copied Text!' : 'Copy Plain Text'}</span>
-                    </button>
-                  </div>
-
-                  {/* JSON Backup Item */}
-                  <div className="border border-slate-150 rounded-2xl p-3.5 space-y-2 flex flex-col justify-between hover:bg-slate-50/50 transition-all">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <FileJson className="w-4 h-4 text-slate-400" />
-                        <span className="text-xs font-extrabold text-slate-800">State Backup JSON</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 font-medium mt-1 leading-normal">
-                        Raw data backup. Safe to upload directly to the AI CV Importer.
-                      </p>
-                    </div>
-                    <div className="flex gap-1.5 mt-2">
                       <button
                         type="button"
-                        onClick={handleCopyJSON}
-                        className="flex-1 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200/60 hover:border-indigo-150 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
-                        title="Copy raw JSON string"
+                        onClick={handleDownloadDOCX}
+                        className="w-full mt-2 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200/60 hover:border-indigo-150 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
-                        <Copy className="w-3 h-3" />
-                        <span>{copiedJson ? 'Copied!' : 'Copy'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDownloadJSON}
-                        className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-150 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
-                        title="Download JSON file backup"
-                      >
-                        <Download className="w-3 h-3" />
-                        <span>Download</span>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download Word DOC</span>
                       </button>
                     </div>
-                  </div>
 
-                </div>
+                    {/* Markdown Item */}
+                    <div className="border border-slate-150 rounded-2xl p-3.5 space-y-2 flex flex-col justify-between hover:bg-slate-50/50 transition-all">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <FileText className="w-4 h-4 text-slate-400" />
+                          <span className="text-xs font-extrabold text-slate-800">Markdown Format</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1 leading-normal">
+                          Structured text ideal for GitHub profile READMEs or portfolios.
+                        </p>
+                      </div>
+                      <div className="flex gap-1.5 mt-2">
+                        <button
+                          type="button"
+                          onClick={handleCopyMarkdown}
+                          className="flex-1 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200/60 hover:border-indigo-155 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadMarkdown}
+                          className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-150 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Get .md</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Plain Text Item */}
+                    <div className="border border-slate-150 rounded-2xl p-3.5 space-y-2 flex flex-col justify-between hover:bg-slate-50/50 transition-all">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <FileText className="w-4 h-4 text-slate-400" />
+                          <span className="text-xs font-extrabold text-slate-800">Plain Text Summary</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1 leading-normal">
+                          Beautiful plain text format for quick form copy-pasting.
+                        </p>
+                      </div>
+                      <div className="flex gap-1.5 mt-2">
+                        <button
+                          type="button"
+                          onClick={handleCopyPlainText}
+                          className="flex-1 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200/60 hover:border-indigo-155 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadPlainText}
+                          className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-150 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Get .txt</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* JSON Backup Item */}
+                    <div className="border border-slate-150 rounded-2xl p-3.5 space-y-2 flex flex-col justify-between hover:bg-slate-50/50 transition-all">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <FileJson className="w-4 h-4 text-slate-400" />
+                          <span className="text-xs font-extrabold text-slate-800">State Backup JSON</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1 leading-normal">
+                          Raw data backup. Safe to upload directly to the AI CV Importer.
+                        </p>
+                      </div>
+                      <div className="flex gap-1.5 mt-2">
+                        <button
+                          type="button"
+                          onClick={handleCopyJSON}
+                          className="flex-1 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200/60 hover:border-indigo-150 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                          title="Copy raw JSON string"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Copy</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadJSON}
+                          className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-150 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                          title="Download JSON file backup"
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>Download</span>
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
               </div>
 
             </div>

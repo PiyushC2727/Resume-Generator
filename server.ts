@@ -3,6 +3,11 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import fs from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execPromise = promisify(exec);
 
 dotenv.config();
 
@@ -151,9 +156,9 @@ ResumeData Schema Structure:
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
-          required: ['updatedResume', 'explanation'],
+          required: ['updatedResumeData', 'explanation'],
           properties: {
-            updatedResume: {
+            updatedResumeData: {
               type: Type.OBJECT,
               description: 'The updated resume JSON object matching the ResumeData schema.',
               properties: {
@@ -218,7 +223,7 @@ ResumeData Schema Structure:
  * 2. ATS Optimization System & Reviewer
  * Evaluates the resume, detects missing keywords, calculates ATS score, and suggests improvements.
  */
-app.post('/api/resume/analyze', async (req: express.Request, res: express.Response) => {
+app.post('/api/resume/ats', async (req: express.Request, res: express.Response) => {
   try {
     const { resumeData, jobDescription } = req.body;
     if (!resumeData) {
@@ -309,7 +314,7 @@ Your response MUST be structured as a valid JSON object matching the requested s
     if (!resultText) {
       throw new Error('Empty response from AI model.');
     }
-    res.json(JSON.parse(resultText));
+    res.json({ analysis: JSON.parse(resultText) });
   } catch (error: any) {
     console.error('Error in /api/resume/analyze:', error);
     res.status(500).json({ error: error.message || 'An error occurred during resume analysis.' });
@@ -427,7 +432,7 @@ Avoid generic and overly flowery wording. Use a clean, compelling, human voice t
     if (!resultText) {
       throw new Error('Empty response from AI model.');
     }
-    res.json(JSON.parse(resultText));
+    res.json({ coverLetter: JSON.parse(resultText) });
   } catch (error: any) {
     console.error('Error in /api/resume/cover-letter:', error);
     res.status(500).json({ error: error.message || 'An error occurred during cover letter generation.' });
@@ -491,7 +496,7 @@ Transform the provided resume JSON into a high-impact LinkedIn profile layout:
     if (!resultText) {
       throw new Error('Empty response from AI model.');
     }
-    res.json(JSON.parse(resultText));
+    res.json({ linkedinProfile: JSON.parse(resultText) });
   } catch (error: any) {
     console.error('Error in /api/resume/linkedin:', error);
     res.status(500).json({ error: error.message || 'An error occurred during LinkedIn optimization.' });
@@ -557,7 +562,7 @@ Analyze the provided resume and deliver:
     if (!resultText) {
       throw new Error('Empty response from AI model.');
     }
-    res.json(JSON.parse(resultText));
+    res.json({ premiumInsights: JSON.parse(resultText) });
   } catch (error: any) {
     console.error('Error in /api/resume/premium:', error);
     res.status(500).json({ error: error.message || 'An error occurred during premium insights generation.' });
@@ -615,6 +620,71 @@ Ensure that:
   } catch (error: any) {
     console.error('Error in /api/resume/latex:', error);
     res.status(500).json({ error: error.message || 'An error occurred during LaTeX code generation.' });
+  }
+});
+
+/**
+ * 7.5. Dynamic LaTeX Compiler Service
+ * Compiles a raw LaTeX string into a binary PDF file stream.
+ */
+app.post('/api/resume/compile', async (req: express.Request, res: express.Response) => {
+  let tempDir: string | null = null;
+  try {
+    const { latexCode } = req.body;
+    if (!latexCode) {
+      return res.status(400).json({ error: 'Missing latexCode.' });
+    }
+
+    const baseTempDir = path.join(process.cwd(), 'temp_builds');
+    if (!fs.existsSync(baseTempDir)) {
+      fs.mkdirSync(baseTempDir, { recursive: true });
+    }
+
+    const uniqueId = `build_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    tempDir = path.join(baseTempDir, uniqueId);
+    fs.mkdirSync(tempDir);
+
+    const texFilePath = path.join(tempDir, 'resume.tex');
+    const pdfFilePath = path.join(tempDir, 'resume.pdf');
+
+    fs.writeFileSync(texFilePath, latexCode, 'utf8');
+
+    const tectonicPath = path.resolve(process.cwd(), '../../bin/tectonic.exe');
+    console.log(`[Tectonic Compiler] Compiling resume in ${tempDir}...`);
+
+    const options = {
+      cwd: tempDir,
+      env: {
+        ...process.env,
+        PATH: `${path.resolve(process.cwd(), '../../bin')};${process.env.PATH}`
+      }
+    };
+
+    await execPromise(`"${tectonicPath}" "${texFilePath}"`, options);
+
+    if (!fs.existsSync(pdfFilePath)) {
+      throw new Error('Tectonic compilation completed, but resume.pdf was not generated.');
+    }
+
+    const pdfBuffer = fs.readFileSync(pdfFilePath);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="resume.pdf"');
+    res.send(pdfBuffer);
+  } catch (error: any) {
+    console.error('[Tectonic Compiler Error]:', error);
+    const errorMessage = error.stderr || error.stdout || error.message || 'LaTeX compilation failed.';
+    res.status(500).json({
+      error: 'LaTeX compilation failed. Please check LaTeX markup syntax.',
+      details: errorMessage
+    });
+  } finally {
+    if (tempDir && fs.existsSync(tempDir)) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (cleanupErr) {
+        console.error('Failed to clean up temp build directory:', cleanupErr);
+      }
+    }
   }
 });
 
