@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-// Global fetch interceptor to support Vercel (static) + Railway (API) separation
+// Force clean rebuild: Global fetch interceptor to support Vercel (static) + Railway (API) separation
 const originalFetch = window.fetch;
 window.fetch = async function (input, init) {
   if (typeof input === 'string' && input.startsWith('/api/')) {
