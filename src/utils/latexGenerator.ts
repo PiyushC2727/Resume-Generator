@@ -285,7 +285,7 @@ ${getExtraSections()}
   // Returns complete formatted document
   return `\\documentclass[letterpaper,10pt]{article}
 \\usepackage{latexsym}
-\\usepackage[empty]{fullpage}
+\\usepackage[margin=${margins}]{geometry}
 \\usepackage{titlesec}
 \\usepackage{marvosym}
 \\usepackage[usenames,dvipsnames]{color}
@@ -304,13 +304,6 @@ ${fontCommand}
 \\fancyfoot{}
 \\renewcommand{\\headrulewidth}{0pt}
 \\renewcommand{\\footrulewidth}{0pt}
-
-% Adjust margins
-\\addtolength{\\oddsidemargin}{-${margins}}
-\\addtolength{\\evensidemargin}{-${margins}}
-\\addtolength{\\textwidth}{2\\oddsidemargin * -1}
-\\addtolength{\\topmargin}{-${margins}}
-\\addtolength{\\textheight}{2\\topmargin * -1}
 
 \\urlstyle{same}
 
