@@ -9,12 +9,7 @@ export async function getDbConnection(): Promise<mysql.Pool> {
 
   if (connectionUri) {
     console.log('[MySQL] Connecting using connection URI...');
-    pool = mysql.createPool({
-      uri: connectionUri,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0
-    });
+    pool = mysql.createPool(connectionUri);
   } else {
     console.log('[MySQL] Connecting using individual environment variables...');
     pool = mysql.createPool({
